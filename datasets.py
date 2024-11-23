@@ -1,21 +1,22 @@
 import h5py
 import math
-import pandas as pd
-from tensorflow.keras.utils import Sequence
+import keras
 import numpy as np
+import pandas as pd
 
 
-class ECGSequence(Sequence):
+class ECGSequence(keras.utils.Sequence):
     @classmethod
     def get_train_and_val(cls, path_to_hdf5, hdf5_dset, path_to_csv, batch_size=8, val_split=0.02):
         n_samples = len(pd.read_csv(path_to_csv))
-        n_train = math.ceil(n_samples*(1-val_split))
+        n_train = math.ceil(n_samples * (1 - val_split))
         train_seq = cls(path_to_hdf5, hdf5_dset, path_to_csv, batch_size, end_idx=n_train)
         valid_seq = cls(path_to_hdf5, hdf5_dset, path_to_csv, batch_size, start_idx=n_train)
         return train_seq, valid_seq
 
     def __init__(self, path_to_hdf5, hdf5_dset, path_to_csv=None, batch_size=8,
-                 start_idx=0, end_idx=None):
+                 start_idx=0, end_idx=None, **kwargs):
+        super().__init__(**kwargs)
         if path_to_csv is None:
             self.y = None
         else:
