@@ -93,16 +93,16 @@ predictor_names = ['DNN', 'cardio.', 'emerg.', 'stud.']
 
 # %% Read datasets
 # Get two annotators
-y_cardiologist1 = pd.read_csv('./data/annotations/cardiologist1.csv').values
-y_cardiologist2 = pd.read_csv('./data/annotations/cardiologist2.csv').values
+y_cardiologist1 = pd.read_csv('data/test/annotations/cardiologist1.csv').values
+y_cardiologist2 = pd.read_csv('data/test/annotations/cardiologist2.csv').values
 # Get true values
-y_true = pd.read_csv('./data/annotations/gold_standard.csv').values
+y_true = pd.read_csv('data/test/annotations/gold_standard.csv').values
 # Get residents and students performance
-y_cardio = pd.read_csv('./data/annotations/cardiology_residents.csv').values
-y_emerg = pd.read_csv('./data/annotations/emergency_residents.csv').values
-y_student = pd.read_csv('./data/annotations/medical_students.csv').values
+y_cardio = pd.read_csv('data/test/annotations/cardiology_residents.csv').values
+y_emerg = pd.read_csv('data/test/annotations/emergency_residents.csv').values
+y_student = pd.read_csv('data/test/annotations/medical_students.csv').values
 # get y_score for different models
-y_score_list = [np.load('./dnn_predicts/other_seeds/model_' + str(i+1) + '.npy') for i in range(10)]
+y_score_list = [np.load('./predictions/model_' + str(i+1) + '.npy') for i in range(10)]
 
 
 # %% Get average model model
@@ -142,8 +142,8 @@ scores_all_df = pd.concat(scores_list, axis=1, keys=['DNN', 'cardio.', 'emerg.',
 scores_all_df = scores_all_df.swaplevel(0, 1, axis=1)
 scores_all_df = scores_all_df.reindex(level=0, columns=score_fun.keys())
 # Save results
-scores_all_df.to_excel("./outputs/tables/scores.xlsx", float_format='%.3f')
-scores_all_df.to_csv("./outputs/tables/scores.csv", float_format='%.3f')
+scores_all_df.to_excel("./figures/scores.xlsx", float_format='%.3f')
+scores_all_df.to_csv("./figures/scores.csv", float_format='%.3f')
 
 
 # %% Plot precision recall curves (Figure 2)
@@ -210,7 +210,7 @@ for k, name in enumerate(diagnosis):
     else:
         ax.legend().remove()
     plt.tight_layout()
-    plt.savefig('./outputs/figures/precision_recall_{0}.pdf'.format(name))
+    plt.savefig('./figures/precision_recall_{0}.pdf'.format(name))
 
 # %% Confusion matrices (Supplementary Table 1)
 
@@ -228,8 +228,8 @@ confusion_matrices = confusion_matrices.reorder_levels([1, 2, 3, 0], axis=0)
 confusion_matrices = confusion_matrices.unstack()
 confusion_matrices = confusion_matrices.unstack()
 confusion_matrices = confusion_matrices['n']
-confusion_matrices.to_excel("./outputs/tables/confusion matrices.xlsx", float_format='%.3f')
-confusion_matrices.to_csv("./outputs/tables/confusion matrices.csv", float_format='%.3f')
+confusion_matrices.to_excel("./figures/confusion matrices.xlsx", float_format='%.3f')
+confusion_matrices.to_csv("./figures/confusion matrices.csv", float_format='%.3f')
 
 
 #%% Compute scores and bootstraped version of these scores
@@ -300,10 +300,10 @@ for sf in score_fun:
     else:
         ax.legend().remove()
     plt.tight_layout()
-    plt.savefig('./outputs/figures/boxplot_bootstrap_{}.pdf'.format(sf))
+    plt.savefig('./figures/boxplot_bootstrap_{}.pdf'.format(sf))
 
 
-scores_resampled_xr.to_dataframe(name='score').to_csv('./outputs/figures/boxplot_bootstrap_data.txt')
+scores_resampled_xr.to_dataframe(name='score').to_csv('./figures/boxplot_bootstrap_data.txt')
 
 #%% McNemar test  (Supplementary Table 3)
 # Get correct and wrong predictions for each of them (cm >= 2 correspond to wrong predictions)
@@ -331,8 +331,8 @@ for i in range(4):
 mcnemar = pd.DataFrame(1-chi2.cdf(mcnemar_score, 1), index=mcnemar_name, columns=diagnosis) # p-value
 
 # Save results
-mcnemar.to_excel("./outputs/tables/mcnemar.xlsx", float_format='%.3f')
-mcnemar.to_csv("./outputs/tables/mcnemar.csv", float_format='%.3f')
+mcnemar.to_excel("./figures/mcnemar.xlsx", float_format='%.3f')
+mcnemar.to_csv("./figures/mcnemar.csv", float_format='%.3f')
 
 # %% Kappa score classifiers (Supplementary Table 2(a))
 
@@ -369,8 +369,8 @@ for i in range(4):
 kappa = pd.DataFrame(kappa_score, index=kappa_name, columns=diagnosis)  # p-value
 
 # Save results
-kappa.to_excel("./outputs/tables/kappa.xlsx", float_format='%.3f')
-kappa.to_csv("./outputs/tables/kappa.csv", float_format='%.3f')
+kappa.to_excel("./figures/kappa.xlsx", float_format='%.3f')
+kappa.to_csv("./figures/kappa.csv", float_format='%.3f')
 
 
 # %% Kappa score dataset generation (Supplementary Table 2(b))
@@ -404,8 +404,8 @@ for r1, r2 in combinations(raters, 2):
 
 kappas_annotators_and_DNN = pd.DataFrame(np.stack(kappa_list), columns=diagnosis, index=names_list)
 print(kappas_annotators_and_DNN)
-kappas_annotators_and_DNN.to_excel("./outputs/tables/kappas_annotators_and_DNN.xlsx", float_format='%.3f')
-kappas_annotators_and_DNN.to_csv("./outputs/tables/kappas_annotators_and_DNN.csv", float_format='%.3f')
+kappas_annotators_and_DNN.to_excel("./figures/kappas_annotators_and_DNN.xlsx", float_format='%.3f')
+kappas_annotators_and_DNN.to_csv("./figures/kappas_annotators_and_DNN.csv", float_format='%.3f')
 
 # %% Compute scores and bootstraped version of these scores on alternative splits
 bootstrap_nsamples = 1000
@@ -415,7 +415,7 @@ for name in ['normal_order', 'date_order', 'individual_patients', 'base_model']:
     print(name)
     # Get data
     yn_true = y_true
-    yn_score = np.load('./dnn_predicts/other_splits/model_'+name+'.npy') if not name == 'base_model' else y_score_best
+    yn_score = np.load('./predictions/model_'+name+'.npy') if not name == 'base_model' else y_score_best
     # Compute threshold
     nclasses = np.shape(yn_true)[1]
     opt_precision, opt_recall, threshold = get_optimal_precision_recall(yn_true, yn_score)
@@ -480,5 +480,5 @@ plt.legend(fontsize=17)
 plt.ylim([0.4, 1.05])
 plt.xlim([-0.5, 5.5])
 plt.tight_layout()
-plt.savefig('./outputs/figures/boxplot_bootstrap_other_splits_{0}.pdf'.format(sf))
-f1_score_resampled_df.to_csv('./outputs/figures/boxplot_bootstrap_other_splits_data.txt', index=False)
+plt.savefig('./figures/boxplot_bootstrap_other_splits_{0}.pdf'.format(sf))
+f1_score_resampled_df.to_csv('./figures/boxplot_bootstrap_other_splits_data.txt', index=False)

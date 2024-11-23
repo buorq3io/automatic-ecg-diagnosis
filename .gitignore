@@ -114,6 +114,10 @@ venv.bak/
 .spyderproject
 .spyproject
 
+# Jetbrains
+.idea/
+.fleet/
+
 # Rope project settings
 .ropeproject
 
@@ -130,3 +134,5 @@ dmypy.json
 
 # Avoid large files
 *.hdf5
+*.keras
+data/train/
