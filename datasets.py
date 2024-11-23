@@ -20,11 +20,13 @@ class ECGSequence(keras.utils.Sequence):
 
     @classmethod
     def get_train_and_val(cls, hdf5_files, csv_files, hdf5_dset="tracings",
-                          batch_size=8, val_split=0.02):
+                          batch_size=8, val_split=0.02, **kwargs):
         n_batches = cls.get_n_batches(hdf5_files, hdf5_dset, batch_size)[1]
         n_train = math.ceil(n_batches * (1 - val_split))
-        train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, end_batch=n_train)
-        valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, start_batch=n_train)
+        train_seq = cls(hdf5_files, csv_files, hdf5_dset,
+                        batch_size, end_batch=n_train, **kwargs)
+        valid_seq = cls(hdf5_files, csv_files, hdf5_dset,
+                        batch_size, start_batch=n_train, **kwargs)
         return train_seq, valid_seq
 
     def __init__(self, hdf5_files, csv_files=None, hdf5_dset="tracings",
