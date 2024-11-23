@@ -1,8 +1,6 @@
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import (ModelCheckpoint, TensorBoard, ReduceLROnPlateau,
-                                        CSVLogger, EarlyStopping)
-from model import get_model
+import keras
 import argparse
+from model import get_model
 from datasets import ECGSequence
 
 if __name__ == "__main__":
@@ -19,37 +17,41 @@ if __name__ == "__main__":
     parser.add_argument('--dataset_name', type=str, default='tracings',
                         help='name of the hdf5 dataset containing tracings')
     args = parser.parse_args()
+
     # Optimization settings
-    loss = 'binary_crossentropy'
     lr = 0.001
     batch_size = 64
-    opt = Adam(lr)
-    callbacks = [ReduceLROnPlateau(monitor='val_loss',
-                                   factor=0.1,
-                                   patience=7,
-                                   min_lr=lr / 100),
-                 EarlyStopping(patience=9,  # Patience should be larger than the one in ReduceLROnPlateau
-                               min_delta=0.00001)]
+    opt = keras.optimizers.Adam(lr)
+    loss = keras.losses.BinaryCrossentropy()
+
+    callbacks = [
+        # Learning Optimizers
+        keras.callbacks.EarlyStopping(patience=9, min_delta=0.00001),
+        keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
+                                          patience=7, min_lr=lr / 100),
+        # Logs
+        keras.callbacks.CSVLogger('./logs/training.log', append=False),
+        keras.callbacks.TensorBoard(log_dir='./logs', write_graph=False),
+        # Checkpoints
+        keras.callbacks.ModelCheckpoint('./models/backup/model0_last.keras'),
+        keras.callbacks.ModelCheckpoint('./models/backup/model0_best.keras'),
+    ]
 
     train_seq, valid_seq = ECGSequence.get_train_and_val(
         args.path_to_hdf5, args.dataset_name, args.path_to_csv, batch_size, args.val_split)
 
     # If you are continuing an interrupted section, uncomment line bellow:
-    #   model = keras.models.load_model(PATH_TO_PREV_MODEL, compile=False)
+    # model = keras.models.load_model(PATH_TO_PREV_MODEL, compile=False)
     model = get_model(train_seq.n_classes)
     model.compile(loss=loss, optimizer=opt)
-    # Create log
-    callbacks += [TensorBoard(log_dir='./logs', write_graph=False),
-                  CSVLogger('training.log', append=False)]  # Change append to true if continuing training
-    # Save the BEST and LAST model
-    callbacks += [ModelCheckpoint('./backup_model_last.hdf5'),
-                  ModelCheckpoint('./backup_model_best.hdf5', save_best_only=True)]
+
     # Train neural network
+    # If you are continuing a interrupted section change initial epoch
     history = model.fit(train_seq,
                         epochs=70,
-                        initial_epoch=0,  # If you are continuing a interrupted section change here
+                        initial_epoch=0,
                         callbacks=callbacks,
                         validation_data=valid_seq,
                         verbose=1)
     # Save final result
-    model.save("./final_model.hdf5")
+    model.save("./models/model0.keras")
