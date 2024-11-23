@@ -6,44 +6,71 @@ import pandas as pd
 
 
 class ECGSequence(keras.utils.Sequence):
+    @staticmethod
+    def get_n_batches(hdf5_files, hdf5_dset, batch_size):
+        n_batches = 0
+        batch_ranges = [0]
+        for hdf5_file in hdf5_files:
+            with h5py.File(hdf5_file, "r") as file:
+                curr_batch_size = math.floor(file[hdf5_dset].shape[0] / batch_size)
+                n_batches += curr_batch_size
+                batch_ranges.append(batch_ranges[-1] + curr_batch_size)
+
+        return batch_ranges, n_batches
+
     @classmethod
-    def get_train_and_val(cls, path_to_hdf5, hdf5_dset, path_to_csv, batch_size=8, val_split=0.02):
-        n_samples = len(pd.read_csv(path_to_csv))
-        n_train = math.ceil(n_samples * (1 - val_split))
-        train_seq = cls(path_to_hdf5, hdf5_dset, path_to_csv, batch_size, end_idx=n_train)
-        valid_seq = cls(path_to_hdf5, hdf5_dset, path_to_csv, batch_size, start_idx=n_train)
+    def get_train_and_val(cls, hdf5_files, csv_files, hdf5_dset="tracings",
+                          batch_size=8, val_split=0.02):
+        n_batches = cls.get_n_batches(hdf5_files, hdf5_dset, batch_size)[1]
+        n_train = math.ceil(n_batches * (1 - val_split))
+        train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, end_batch=n_train)
+        valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, start_batch=n_train)
         return train_seq, valid_seq
 
-    def __init__(self, path_to_hdf5, hdf5_dset, path_to_csv=None, batch_size=8,
-                 start_idx=0, end_idx=None, **kwargs):
+    def __init__(self, hdf5_files, csv_files=None, hdf5_dset="tracings",
+                 batch_size=8, start_batch=0, end_batch=None, **kwargs):
         super().__init__(**kwargs)
-        if path_to_csv is None:
-            self.y = None
-        else:
-            self.y = pd.read_csv(path_to_csv).values
-        # Get tracings
-        self.f = h5py.File(path_to_hdf5, "r")
-        self.x = self.f[hdf5_dset]
+
+        self.predict_mode = False
+        if csv_files is None:
+            self.predict_mode = True
+
+        self.csvs = [] if self.predict_mode else \
+            [pd.read_csv(file).values for file in csv_files]
+
+        self.hdf5_dset = hdf5_dset
+        self.hdf5s = [h5py.File(file, "r") for file in hdf5_files]
+        self.ranges = self.get_n_batches(hdf5_files, hdf5_dset, batch_size)[0]
+
         self.batch_size = batch_size
-        if end_idx is None:
-            end_idx = len(self.x)
-        self.start_idx = start_idx
-        self.end_idx = end_idx
+        self.start_batch = start_batch
+        self.end_batch = end_batch if end_batch is not None else (
+            self.get_n_batches(hdf5_files, hdf5_dset, batch_size)[1])
 
     @property
     def n_classes(self):
-        return self.y.shape[1]
+        return self.csvs[0].shape[1]
 
-    def __getitem__(self, idx):
-        start = self.start_idx + idx * self.batch_size
-        end = min(start + self.batch_size, self.end_idx)
-        if self.y is None:
-            return np.array(self.x[start:end, :, :])
+    def __getitem__(self, item):
+        file_index, batch_index = 0, 0
+        for i in range(1, len(self.ranges)):
+            if (self.start_batch + item) < self.ranges[i]:
+                file_index = i - 1
+                batch_index = item + self.start_batch - self.ranges[i - 1]
+                break
+
+        start = batch_index * self.batch_size
+        end = start + self.batch_size
+
+        if self.predict_mode:
+            return np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, :])
         else:
-            return np.array(self.x[start:end, :, :]), np.array(self.y[start:end])
+            return (np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, :]),
+                    np.array(self.csvs[file_index][start:end]))
 
     def __len__(self):
-        return math.ceil((self.end_idx - self.start_idx) / self.batch_size)
+        return self.end_batch - self.start_batch
 
     def __del__(self):
-        self.f.close()
+        for file in self.hdf5s:
+            file.close()
