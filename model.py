@@ -64,7 +64,7 @@ class ResidualUnit(object):
             # This is one of the two alternatives presented in ResNet paper
             # Other option is to just fill the matrix with zeros.
             y = keras.layers.Conv1D(self.n_filters_out, 1, padding='same',
-                       use_bias=False, kernel_initializer=self.kernel_initializer)(y)
+                                    use_bias=False, kernel_initializer=self.kernel_initializer)(y)
         return y
 
     def _batch_norm_plus_activation(self, x):
@@ -85,15 +85,15 @@ class ResidualUnit(object):
         y = self._skip_connection(y, downsample, n_filters_in)
         # 1st layer
         x = keras.layers.Conv1D(self.n_filters_out, self.kernel_size, padding='same',
-                   use_bias=False, kernel_initializer=self.kernel_initializer)(x)
+                                use_bias=False, kernel_initializer=self.kernel_initializer)(x)
         x = self._batch_norm_plus_activation(x)
         if self.dropout_rate > 0:
             x = keras.layers.Dropout(self.dropout_rate)(x)
 
         # 2nd layer
         x = keras.layers.Conv1D(self.n_filters_out, self.kernel_size, strides=downsample,
-                   padding='same', use_bias=False,
-                   kernel_initializer=self.kernel_initializer)(x)
+                                padding='same', use_bias=False,
+                                kernel_initializer=self.kernel_initializer)(x)
         if self.preactivation:
             x = keras.layers.Add()([x, y])  # Sum skip connection and main connection
             y = x
@@ -116,7 +116,7 @@ def get_model(n_classes, last_layer='sigmoid'):
     signal = keras.layers.Input(shape=(4096, 12), dtype=np.float32, name='signal')
     x = signal
     x = keras.layers.Conv1D(64, kernel_size, padding='same', use_bias=False,
-               kernel_initializer=kernel_initializer)(x)
+                            kernel_initializer=kernel_initializer)(x)
     x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Activation('relu')(x)
     x, y = ResidualUnit(1024, 128, kernel_size=kernel_size,
@@ -128,7 +128,9 @@ def get_model(n_classes, last_layer='sigmoid'):
     x, _ = ResidualUnit(16, 320, kernel_size=kernel_size,
                         kernel_initializer=kernel_initializer)([x, y])
     x = keras.layers.Flatten()(x)
-    diagn = keras.layers.Dense(n_classes, activation=last_layer, kernel_initializer=kernel_initializer)(x)
+    x = keras.layers.Dense(n_classes, kernel_initializer=kernel_initializer)(x)
+    diagn = keras.layers.Activation(last_layer, dtype=np.float32)(x)
+
     model = keras.models.Model(signal, diagn)
     return model
 
