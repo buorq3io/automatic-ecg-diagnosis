@@ -9,7 +9,7 @@ from sklearn.metrics import (precision_score, recall_score,
 from settings import TEST_ANNOTATIONS_PATH, PREDICTIONS_PATH, FIGURES_PATH
 
 
-class ECGStatistics:
+class ModelPerformance:
     def __init__(self, model_id: int):
         # Constants
         self.cache = {}
