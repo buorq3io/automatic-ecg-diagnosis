@@ -4,8 +4,8 @@ import xarray as xr
 import seaborn as sns
 from functools import partial
 import matplotlib.pyplot as plt
-from sklearn.metrics import (precision_score, recall_score,
-                             f1_score, precision_recall_curve)
+from sklearn.metrics import (precision_score, recall_score, f1_score,
+                             precision_recall_curve, confusion_matrix)
 from settings import TEST_ANNOTATIONS_PATH, PREDICTIONS_PATH, FIGURES_PATH
 
 
@@ -165,3 +165,21 @@ class ModelPerformance:
 
         (scores_resampled_xr.to_dataframe(name="score")
          .to_csv(FIGURES_PATH / f"boxplot_bootstrap_data_{self.model_id}.txt"))
+
+    def generate_supplementary_table_one(self):
+        m = [[confusion_matrix(self.y_gold[:, k], y_pred[:, k],
+                               labels=[0, 1]) for k in range(len(self.diagnosis))]
+             for y_pred in [self.y_neuralnet, self.y_cardio, self.y_emerg, self.y_student]]
+
+        m_xarray = xr.DataArray(np.array(m),
+                                dims=['predictor', 'diagnosis', 'true label', 'predicted label'],
+                                coords={'predictor': ['DNN', 'cardio.', 'emerg.', 'stud.'],
+                                        'diagnosis': self.diagnosis,
+                                        'true label': ['not present', 'present'],
+                                        'predicted label': ['not present', 'present']})
+        confusion_matrices = m_xarray.to_dataframe('n')
+        confusion_matrices = confusion_matrices.reorder_levels([1, 2, 3, 0], axis=0)
+        confusion_matrices = confusion_matrices.unstack().unstack()['n']
+        confusion_matrices.to_csv(
+            FIGURES_PATH / f"confusion_matrices_{self.model_id}.csv", float_format='%.3f'
+        )
