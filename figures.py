@@ -4,18 +4,19 @@ import xarray as xr
 import seaborn as sns
 from functools import partial
 import matplotlib.pyplot as plt
+from datasets import ModelSpesification
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              precision_recall_curve, confusion_matrix)
-from settings import TEST_ANNOTATIONS_PATH, PREDICTIONS_PATH, FIGURES_PATH
+from settings import TEST_ANNOTATIONS_PATH
 
 
 class ModelPerformance:
-    def __init__(self, model_id: int):
+    def __init__(self, model_spec: ModelSpesification):
         # Constants
         self.cache = {}
-        self.model_id = model_id
+        self.specs = model_spec
         self.score_fun = {"Precision": precision_score, "Recall": recall_score,
-                          "Specificity": partial(recall_score, pos_label=0), "F1 score": f1_score}
+                          "Specificity": partial(recall_score, pos_label=0), "F1": f1_score}
         self.predictor_names = ["DNN", "cardio.", "emerg.", "stud."]
         self.diagnosis = ["1dAVb", "RBBB", "LBBB", "SB", "AF", "ST"]
 
@@ -24,7 +25,7 @@ class ModelPerformance:
         self.y_student = pd.read_csv(TEST_ANNOTATIONS_PATH / "medical_students.csv").values
         self.y_emerg = pd.read_csv(TEST_ANNOTATIONS_PATH / "emergency_residents.csv").values
         self.y_cardio = pd.read_csv(TEST_ANNOTATIONS_PATH / "cardiology_residents.csv").values
-        self.y_dnn = np.load(PREDICTIONS_PATH / f"prediction_{model_id}.npy")
+        self.y_dnn = np.load(self.specs.model_dir / f"prediction.npy")
 
         # Get neural network prediction
         self.threshold = self.get_optimal_precision_recall(self.y_gold, self.y_dnn)[2]
@@ -54,7 +55,7 @@ class ModelPerformance:
         for k in range(np.shape(y_true)[1]):
             # Get precision-recall curve
             precision, recall, thresh = precision_recall_curve(y_true[:, k], y_nn[:, k])
-            f1 = np.nan_to_num(2 * precision * recall / (precision + recall))
+            f1 = np.nan_to_num(2 * precision * recall / (precision + recall + 1e-7))
 
             # Select threshold that maximize f1 score
             f1_index = np.argmax(f1)
@@ -66,15 +67,6 @@ class ModelPerformance:
             opt_threshold.append(t)
 
         return np.array(opt_precision), np.array(opt_recall), np.array(opt_threshold)
-
-    def set_model_id(self, m_id: int):
-        self.model_id = m_id
-        self.cache.pop("bootstrapped")
-        self.y_dnn = np.load(PREDICTIONS_PATH / f"prediction_{m_id}.npy")
-
-        self.threshold = self.get_optimal_precision_recall(self.y_gold, self.y_dnn)[2]
-        self.y_neuralnet = np.zeros_like(self.y_dnn)
-        self.y_neuralnet[self.y_dnn > self.threshold] = 1
 
     def generate_table_two(self):
         scores_list = []
@@ -90,7 +82,7 @@ class ModelPerformance:
         scores_all_df = scores_all_df.reindex(level=0, columns=self.score_fun.keys())
 
         # Save results
-        scores_all_df.to_csv(FIGURES_PATH / f"scores_{self.model_id}.csv", float_format="%.3f")
+        scores_all_df.to_csv(self.specs.figures_dir / f"scores.csv", float_format="%.3f")
 
     def _generate_bootstrapped_scores(self):
         bootstrap_nsamples = 1000
@@ -161,10 +153,7 @@ class ModelPerformance:
                 ax.legend().remove()
 
             plt.tight_layout()
-            plt.savefig(FIGURES_PATH / f"boxplot_bootstrap_{sf.lower()}_{self.model_id}.pdf")
-
-        (scores_resampled_xr.to_dataframe(name="score")
-         .to_csv(FIGURES_PATH / f"boxplot_bootstrap_data_{self.model_id}.txt"))
+            plt.savefig(self.specs.figures_dir / f"{sf.lower()}.png")
 
     def generate_supplementary_table_one(self):
         m = [[confusion_matrix(self.y_gold[:, k], y_pred[:, k],
@@ -180,6 +169,4 @@ class ModelPerformance:
         confusion_matrices = m_xarray.to_dataframe('n')
         confusion_matrices = confusion_matrices.reorder_levels([1, 2, 3, 0], axis=0)
         confusion_matrices = confusion_matrices.unstack().unstack()['n']
-        confusion_matrices.to_csv(
-            FIGURES_PATH / f"confusion_matrices_{self.model_id}.csv", float_format='%.3f'
-        )
+        confusion_matrices.to_csv(self.specs.figures_dir / f"confusion.csv", float_format='%.3f')
