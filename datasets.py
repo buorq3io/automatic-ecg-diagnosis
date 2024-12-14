@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Literal
 
-from settings import INPUT_DATA_PATH, LABEL_DATA_PATH
+from settings import INPUT_DATA_PATH, LABEL_DATA_PATH, MODELS_PATH
 
 
 class ECGSequence(keras.utils.Sequence):
@@ -148,3 +148,43 @@ def get_files(data_type: Literal["input", "label"]):
                          if pattern.match(file.name)]
 
     return sorted(files)
+
+
+class ModelSpesification:
+
+    def __init__(self, id_: int, default: str = None, tags: tuple = None):
+        self.id = id_
+        self.default = default
+        self.tags = tuple(tags) if tags else ()
+
+        self.name = f"model_{self.default}_{self.id}" \
+            if self.default else f"model_{self.id}"
+
+        self.model_dir = MODELS_PATH / self.name
+        self.log_dir = self.model_dir / "logs"
+        self.figures_dir = self.model_dir / "figures"
+
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.figures_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def model(self):
+        file_path = (self.model_dir / "model.keras")
+        if not file_path.exists():
+            raise FileExistsError("Models doesn't exist")
+
+        return keras.models.load_model(file_path, compile=False)
+
+    @property
+    def prediction(self):
+        file_path = (self.model_dir / "prediction.npy")
+        if not file_path.exists():
+            raise FileExistsError("Evaluation on the test set doesn't exist")
+
+        return np.load(file_path)
+
+    def __getitem__(self, item):
+        if item not in self.tags:
+            raise KeyError(f"Tag '{item}' not found. Available tags: {self.tags}")
+
+        return ModelSpesification(id_=self.id, default=item)
