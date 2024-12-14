@@ -4,13 +4,13 @@ import xarray as xr
 import seaborn as sns
 from functools import partial
 import matplotlib.pyplot as plt
-from datasets import ModelSpesification
+from model import ModelSpesification
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              precision_recall_curve, confusion_matrix)
 from settings import TEST_ANNOTATIONS_PATH
 
 
-class ModelPerformance:
+class ModelFigureGenerator:
     def __init__(self, model_spec: ModelSpesification):
         # Constants
         self.cache = {}
@@ -153,7 +153,7 @@ class ModelPerformance:
                 ax.legend().remove()
 
             plt.tight_layout()
-            plt.savefig(self.specs.figures_dir / f"{sf.lower()}.png")
+            plt.savefig(self.specs.figures_dir / f"{sf.lower()}.png", dpi=600)
 
     def generate_supplementary_table_one(self):
         m = [[confusion_matrix(self.y_gold[:, k], y_pred[:, k],
