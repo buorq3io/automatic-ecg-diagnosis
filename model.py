@@ -2,6 +2,7 @@ import keras
 import numpy as np
 from settings import MODELS_PATH
 
+
 class ModelSpesification:
 
     def __init__(self, id_: int, default: str = None, tags: tuple = None):
@@ -150,10 +151,11 @@ class ResidualUnit(object):
         return [x, y]
 
 
-def get_model(n_classes, last_layer='sigmoid'):
+def get_model(n_classes, n_channels=12, batch_size=None, last_layer='sigmoid'):
     kernel_size = 16
     kernel_initializer = 'he_normal'
-    signal = keras.layers.Input(shape=(4096, 12), dtype=np.float32, name='signal')
+    signal = keras.layers.Input(shape=(4096, n_channels), batch_size=batch_size,
+                                dtype=np.float32, name='signal')
     x = signal
     x = keras.layers.Conv1D(64, kernel_size, padding='same', use_bias=False,
                             kernel_initializer=kernel_initializer)(x)

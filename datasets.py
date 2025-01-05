@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Literal
 
-from settings import INPUT_DATA_PATH, LABEL_DATA_PATH
+from settings import INPUT_DATA_PATH, LABEL_DATA_PATH, classes
 
 
 class ECGSequence(keras.utils.Sequence):
@@ -25,17 +25,19 @@ class ECGSequence(keras.utils.Sequence):
 
     @classmethod
     def get_train_and_val(cls, hdf5_files, csv_files, hdf5_dset="tracings",
-                          batch_size=8, val_split=0.02, drop=0, shuffle=True, **kwargs):
+                          batch_size=8, val_split=0.02, drop=0, shuffle=True,
+                          channels=None, **kwargs):
         n_batches = cls.get_n_batches(hdf5_files, hdf5_dset, batch_size, drop)[1]
         n_train = math.ceil(n_batches * (1 - val_split))
-        train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size,
+        train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, channels=channels,
                         drop=drop, shuffle=shuffle, end_batch=n_train, **kwargs)
-        valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size,
+        valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, channels=channels,
                         drop=drop, shuffle=shuffle, start_batch=n_train, **kwargs)
         return train_seq, valid_seq
 
-    def __init__(self, hdf5_files, csv_files=None, hdf5_dset="tracings", batch_size=8,
-                 start_batch=0, end_batch=None, drop=0, shuffle=True, **kwargs):
+    def __init__(self, hdf5_files, csv_files=None, hdf5_dset="tracings",
+                 batch_size=8, start_batch=0, end_batch=None, drop=0,
+                 shuffle=True, channels=None, **kwargs):
         super().__init__(**kwargs)
 
         self.predict_mode = False
@@ -43,7 +45,7 @@ class ECGSequence(keras.utils.Sequence):
             self.predict_mode = True
 
         self.csvs = [] if self.predict_mode else \
-            [pd.read_csv(file).values for file in csv_files]
+            [pd.read_csv(file).loc[:, classes].values for file in csv_files]
 
         self.hdf5_dset = hdf5_dset
         self.hdf5s = [h5py.File(file, "r") for file in hdf5_files]
@@ -53,6 +55,10 @@ class ECGSequence(keras.utils.Sequence):
         self.start_batch = start_batch
         self.end_batch = end_batch if end_batch is not None else (
             self.get_n_batches(hdf5_files, hdf5_dset, batch_size, drop)[1])
+
+        self.channels = channels
+        if self.channels is None:
+            self.channels = list(range(self.hdf5s[0][hdf5_dset].shape[2]))
 
         self.shuffle = shuffle
         self.shuffle_indices = np.arange(self.__len__())
@@ -79,9 +85,9 @@ class ECGSequence(keras.utils.Sequence):
         end = start + self.batch_size
 
         if self.predict_mode:
-            return np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, :])
+            return np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.channels])
         else:
-            return (np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, :]),
+            return (np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.channels]),
                     np.array(self.csvs[file_index][start:end]))
 
     def __len__(self):
@@ -92,43 +98,23 @@ class ECGSequence(keras.utils.Sequence):
             file.close()
 
 
-def _align_entries(indices: np.ndarray, data: np.ndarray, num_classes=6, drop=0):
-    ydict = {}
-    for item in data:
-        ydict[item[0]] = item
-
-    result = np.empty(shape=(len(indices) - drop, num_classes), dtype=object)
-    for index, value in enumerate(indices):
-        if index == len(indices) - drop: break
-        result[index] = ydict[str(value)][4: 4 + num_classes] == "True"
-
-    return result
-
-
-def generate_label_file(input_file: str, output_file: str,
-                        num_classes=6, drop=0, verbose=True):
-    y = pd.read_csv(LABEL_DATA_PATH.parent / "exams.csv", dtype=object).values
+def generate_label_file(input_file: str, output_file: str):
     with h5py.File(INPUT_DATA_PATH / f"{input_file}", "r+") as file:
         x, ids = file["tracings"], file["exam_id"]
-        y_curr = _align_entries(ids, y, num_classes, drop)
 
-        if verbose:
-            print(
-                f"{f' FILE: {input_file} -> {output_file} '.center(60, '*')}\n"
-                f"{f'X SHAPE: {x.shape}'.center(60, ' ')}\n"
-                f"{f'Y SHAPE: {y_curr.shape} I SHAPE: {ids.shape}'.center(60, ' ')}"
-            )
+        y = pd.read_csv(LABEL_DATA_PATH.parent / "exams.csv", dtype=object)
+        y = (y.astype({"exam_id": int})).set_index("exam_id").reindex(ids)
+        with pd.option_context('future.no_silent_downcasting', True):
+            y.replace({"True": 1, "False": 0}, inplace=True)
 
         # Save labels
-        pd.DataFrame(y_curr).astype(int).to_csv(
-            LABEL_DATA_PATH / output_file,
-            sep=",", encoding="utf-8", index=False, header=True
-        )
+        pd.DataFrame(y).to_csv(LABEL_DATA_PATH / output_file,
+                               index=False, header=True)
 
 
-def generate_label_files(**kwargs):
+def generate_label_files():
     for file in get_files("input"):
-        generate_label_file(file.name, f"{file.stem}.csv", **kwargs)
+        generate_label_file(file.name, f"{file.stem}.csv")
 
 
 def get_files(data_type: Literal["input", "label"]):

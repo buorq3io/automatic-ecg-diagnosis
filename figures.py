@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from model import ModelSpesification
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              precision_recall_curve, confusion_matrix)
-from settings import TEST_ANNOTATIONS_PATH
+from settings import TEST_ANNOTATIONS_PATH, classes
 
 
 class ModelFigureGenerator:
@@ -18,7 +18,7 @@ class ModelFigureGenerator:
         self.score_fun = {"Precision": precision_score, "Recall": recall_score,
                           "Specificity": partial(recall_score, pos_label=0), "F1": f1_score}
         self.predictor_names = ["DNN", "cardio.", "emerg.", "stud."]
-        self.diagnosis = ["1dAVb", "RBBB", "LBBB", "SB", "AF", "ST"]
+        self.diagnosis = classes
 
         # Cardiologists, residents and students performance
         self.y_gold = pd.read_csv(TEST_ANNOTATIONS_PATH / "gold_standard.csv").values
@@ -147,7 +147,7 @@ class ModelFigureGenerator:
             plt.xlabel("")
             plt.ylabel("", fontsize=16)
 
-            if sf == "F1 score":
+            if sf == "F1":
                 plt.legend(fontsize=17)
             else:
                 ax.legend().remove()
