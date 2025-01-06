@@ -3,44 +3,43 @@ import numpy as np
 from helpers import ResourcePath
 
 
-class ModelSpesification:
-
-    def __init__(self, id_: int, default: str = None, tags: tuple = None):
+class ModelLoader:
+    def __init__(self, id_: int, tag: str):
         self.id = id_
-        self.default = default
-        self.tags = tuple(tags) if tags else ()
+        self.tag = tag
 
-        self.name = f"model_{self.default}_{self.id}" \
-            if self.default else f"model_{self.id}"
+        self.model_dir = ResourcePath.MODELS / f"model_{self.id}"
+        self.pred_path = self.model_dir / f"model_{self.tag}.keras"
+        self.model_path = self.model_dir / f"prediction_{self.tag}.keras"
 
-        self.model_dir = ResourcePath.MODELS / self.name
         self.log_dir = self.model_dir / "logs"
-        self.figures_dir = self.model_dir / "figures"
+        self.figures_dir = self.model_dir / "figures" / self.tag
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.figures_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def model(self):
-        file_path = (self.model_dir / "model.keras")
-        if not file_path.exists():
-            raise FileExistsError("Models doesn't exist")
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"Model with tag '{self.tag}' doesn't exist")
 
-        return keras.models.load_model(file_path, compile=False)
+        return keras.models.load_model(self.model_path, compile=False)
 
     @property
     def prediction(self):
-        file_path = (self.model_dir / "prediction.npy")
-        if not file_path.exists():
-            raise FileExistsError("Evaluation on the test set doesn't exist")
+        if not self.pred_path.exists():
+            raise FileNotFoundError(f"Prediction with tag '{self.tag}' doesn't exist")
 
-        return np.load(file_path)
+        return np.load(self.pred_path)
+
+
+class ModelManager:
+    def __init__(self, id_: int, tags: tuple[str, ...] = tuple()):
+        self.id = id_
+        self.loaders = {tag: ModelLoader(id_, tag) for tag in tags}
 
     def __getitem__(self, item):
-        if item not in self.tags:
-            raise KeyError(f"Tag '{item}' not found. Available tags: {self.tags}")
-
-        return ModelSpesification(id_=self.id, default=item)
+        return self.loaders[item]
 
 
 class ResidualUnit(object):

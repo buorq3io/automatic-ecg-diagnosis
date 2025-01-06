@@ -5,18 +5,18 @@ import seaborn as sns
 from typing import Iterable
 from functools import partial
 import matplotlib.pyplot as plt
-from model import ModelSpesification
+from model import ModelLoader
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              precision_recall_curve, confusion_matrix)
 from helpers import ResourcePath, ArrhythmiaType
 
 
 class ModelFigureGenerator:
-    def __init__(self, model_spec: ModelSpesification,
+    def __init__(self, model_loader: ModelLoader,
                  types: Iterable[ArrhythmiaType] = tuple(ArrhythmiaType)):
         # Constants
         self.cache = {}
-        self.specs = model_spec
+        self.loader = model_loader
         self.score_fun = {"Precision": precision_score, "Recall": recall_score,
                           "Specificity": partial(recall_score, pos_label=0), "F1": f1_score}
         self.predictor_names = ["DNN", "cardio.", "emerg.", "stud."]
@@ -31,7 +31,7 @@ class ModelFigureGenerator:
                                   "emergency_residents.csv").loc[:, self.diagnosis].values
         self.y_card = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
                                   "cardiology_residents.csv").loc[:, self.diagnosis].values
-        self.y_dnn = np.load(self.specs.model_dir / f"prediction.npy")
+        self.y_dnn = np.load(self.loader.pred_path)
 
         # Get neural network prediction
         self.threshold = self.get_optimal_precision_recall(self.y_gold, self.y_dnn)[2]
@@ -88,7 +88,7 @@ class ModelFigureGenerator:
         scores_all_df = scores_all_df.reindex(level=0, columns=self.score_fun.keys())
 
         # Save results
-        scores_all_df.to_csv(self.specs.figures_dir / f"scores.csv", float_format="%.3f")
+        scores_all_df.to_csv(self.loader.figures_dir / f"scores.csv", float_format="%.3f")
 
     def _generate_bootstrapped_scores(self):
         bootstrap_nsamples = 1000
@@ -159,7 +159,7 @@ class ModelFigureGenerator:
                 ax.legend().remove()
 
             plt.tight_layout()
-            plt.savefig(self.specs.figures_dir / f"{sf.lower()}.png", dpi=600)
+            plt.savefig(self.loader.figures_dir / f"{sf.lower()}.png", dpi=600)
 
     def generate_supplementary_table_one(self):
         m = [[confusion_matrix(self.y_gold[:, k], y_pred[:, k],
@@ -175,4 +175,4 @@ class ModelFigureGenerator:
         confusion_matrices = m_xarray.to_dataframe('n')
         confusion_matrices = confusion_matrices.reorder_levels([1, 2, 3, 0], axis=0)
         confusion_matrices = confusion_matrices.unstack().unstack()['n']
-        confusion_matrices.to_csv(self.specs.figures_dir / f"confusion.csv", float_format='%.3f')
+        confusion_matrices.to_csv(self.loader.figures_dir / f"confusion.csv", float_format='%.3f')
