@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import seaborn as sns
+from typing import Iterable
 from functools import partial
 import matplotlib.pyplot as plt
 from model import ModelSpesification
@@ -11,24 +12,25 @@ from helpers import ResourcePath, ArrhythmiaType
 
 
 class ModelFigureGenerator:
-    def __init__(self, model_spec: ModelSpesification):
+    def __init__(self, model_spec: ModelSpesification,
+                 types: Iterable[ArrhythmiaType] = tuple(ArrhythmiaType)):
         # Constants
         self.cache = {}
         self.specs = model_spec
         self.score_fun = {"Precision": precision_score, "Recall": recall_score,
                           "Specificity": partial(recall_score, pos_label=0), "F1": f1_score}
         self.predictor_names = ["DNN", "cardio.", "emerg.", "stud."]
-        self.diagnosis = list(ArrhythmiaType)
+        self.diagnosis = [member.value for member in types]
 
         # Cardiologists, residents and students performance
         self.y_gold = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
-                                  "gold_standard.csv")[:, self.diagnosis].values
+                                  "gold_standard.csv").loc[:, self.diagnosis].values
         self.y_stud = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
-                                  "medical_students.csv")[:, self.diagnosis].values
+                                  "medical_students.csv").loc[:, self.diagnosis].values
         self.y_emrg = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
-                                  "emergency_residents.csv")[:, self.diagnosis].values
+                                  "emergency_residents.csv").loc[:, self.diagnosis].values
         self.y_card = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
-                                  "cardiology_residents.csv")[:, self.diagnosis].values
+                                  "cardiology_residents.csv").loc[:, self.diagnosis].values
         self.y_dnn = np.load(self.specs.model_dir / f"prediction.npy")
 
         # Get neural network prediction

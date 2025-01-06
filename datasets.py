@@ -5,38 +5,43 @@ import keras
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Literal
-from helpers import ResourcePath, ArrhythmiaType
+from typing import Literal, Iterable
+from helpers import ResourcePath, ArrhythmiaType, CardiogramLead
 
 
-class ECGSequence(keras.utils.Sequence):
+class CardiogramSequence(keras.utils.Sequence):
     @staticmethod
-    def get_n_batches(hdf5_files, hdf5_dset, batch_size, drop=0):
+    def get_batch_info(hdf5_files: Iterable[Path], hdf5_dset: str,
+                       batch_size: int, drop_last: bool):
         n_batches = 0
         batch_ranges = [0]
+
+        drop = 1 if drop_last else 0
         for hdf5_file in hdf5_files:
             with h5py.File(hdf5_file, "r") as file:
-                curr_batch_size = math.floor((file[hdf5_dset].shape[0] - drop) / batch_size)
+                curr_batch_size = math.ceil(file[hdf5_dset].shape[0] / batch_size) - drop
                 n_batches += curr_batch_size
                 batch_ranges.append(batch_ranges[-1] + curr_batch_size)
 
         return batch_ranges, n_batches
 
     @classmethod
-    def get_train_and_val(cls, hdf5_files, csv_files, hdf5_dset="tracings",
-                          batch_size=8, val_split=0.02, drop=0, shuffle=True,
-                          channels=None, **kwargs):
-        n_batches = cls.get_n_batches(hdf5_files, hdf5_dset, batch_size, drop)[1]
+    def get_train_and_val(cls, hdf5_files: Iterable[Path], csv_files: Iterable[Path],
+                          hdf5_dset: str = "tracings", batch_size: int = 32,
+                          val_split: float = 0.02, drop_last: bool = True, **kwargs):
+        n_batches = cls.get_batch_info(hdf5_files, hdf5_dset, batch_size, drop_last)[1]
         n_train = math.ceil(n_batches * (1 - val_split))
-        train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, channels=channels,
-                        drop=drop, shuffle=shuffle, end_batch=n_train, **kwargs)
-        valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size, channels=channels,
-                        drop=drop, shuffle=shuffle, start_batch=n_train, **kwargs)
+        train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size,
+                        drop_last=drop_last, end_batch=n_train, **kwargs)
+        valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size,
+                        drop_last=drop_last, start_batch=n_train, **kwargs)
         return train_seq, valid_seq
 
-    def __init__(self, hdf5_files, csv_files=None, hdf5_dset="tracings",
-                 batch_size=8, start_batch=0, end_batch=None, drop=0,
-                 shuffle=True, channels=None, **kwargs):
+    def __init__(self, hdf5_files: Iterable[Path], csv_files: Iterable[Path] = None,
+                 hdf5_dset: str = "tracings", batch_size: int = 32, start_batch: int = 0,
+                 end_batch: int = None, drop_last: bool = True, shuffle: bool = True,
+                 leads: Iterable[CardiogramLead] = tuple(CardiogramLead),
+                 types: Iterable[ArrhythmiaType] = tuple(ArrhythmiaType), **kwargs):
         super().__init__(**kwargs)
 
         self.predict_mode = False
@@ -44,21 +49,18 @@ class ECGSequence(keras.utils.Sequence):
             self.predict_mode = True
 
         self.csvs = [] if self.predict_mode else \
-            [pd.read_csv(file).loc[:, list(ArrhythmiaType)].values for file in csv_files]
+            [pd.read_csv(file).loc[:, types].values for file in csv_files]
 
         self.hdf5_dset = hdf5_dset
         self.hdf5s = [h5py.File(file, "r") for file in hdf5_files]
-        self.ranges = self.get_n_batches(hdf5_files, hdf5_dset, batch_size, drop)[0]
+        self.ranges = self.get_batch_info(hdf5_files, hdf5_dset, batch_size, drop_last)[0]
 
         self.batch_size = batch_size
         self.start_batch = start_batch
         self.end_batch = end_batch if end_batch is not None else (
-            self.get_n_batches(hdf5_files, hdf5_dset, batch_size, drop)[1])
+            self.get_batch_info(hdf5_files, hdf5_dset, batch_size, drop_last)[1])
 
-        self.channels = channels
-        if self.channels is None:
-            self.channels = list(range(self.hdf5s[0][hdf5_dset].shape[2]))
-
+        self.leads = leads
         self.shuffle = shuffle
         self.shuffle_indices = np.arange(self.__len__())
 
@@ -69,7 +71,7 @@ class ECGSequence(keras.utils.Sequence):
     def on_epoch_end(self):
         np.random.shuffle(self.shuffle_indices)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int):
         if self.shuffle:
             item = self.shuffle_indices[item]
 
@@ -81,12 +83,13 @@ class ECGSequence(keras.utils.Sequence):
                 break
 
         start = batch_index * self.batch_size
-        end = start + self.batch_size
+        end = min(start + self.batch_size,
+                  self.hdf5s[file_index][self.hdf5_dset].shape[0])
 
         if self.predict_mode:
-            return np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.channels])
+            return np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.leads])
         else:
-            return (np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.channels]),
+            return (np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.leads]),
                     np.array(self.csvs[file_index][start:end]))
 
     def __len__(self):

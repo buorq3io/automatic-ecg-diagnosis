@@ -5,7 +5,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import numpy as np
-from datasets import ECGSequence
+from datasets import CardiogramSequence
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Get performance on test set from hdf5')
@@ -25,7 +25,7 @@ if __name__ == '__main__':
         warnings.warn("Unknown arguments:" + str(unk) + ".")
 
     # Import data
-    seq = ECGSequence(args.path_to_hdf5, args.dataset_name, batch_size=args.bs)
+    seq = CardiogramSequence(args.path_to_hdf5, args.dataset_name, batch_size=args.bs)
     # Import model
     model = keras.models.load_model(args.path_to_model, compile=False)
     model.compile(loss=keras.losses.BinaryCrossentropy(),

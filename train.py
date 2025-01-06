@@ -1,7 +1,7 @@
 import keras
 import argparse
 from model import get_model
-from datasets import ECGSequence
+from datasets import CardiogramSequence
 
 if __name__ == "__main__":
     # Get data and train
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         keras.callbacks.ModelCheckpoint('./models/backup/model0_best.keras'),
     ]
 
-    train_seq, valid_seq = ECGSequence.get_train_and_val(
+    train_seq, valid_seq = CardiogramSequence.get_train_and_val(
         args.path_to_hdf5, args.dataset_name, args.path_to_csv, batch_size, args.val_split)
 
     # If you are continuing an interrupted section, uncomment line bellow:
