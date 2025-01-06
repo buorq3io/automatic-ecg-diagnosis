@@ -1,6 +1,6 @@
 import keras
 import numpy as np
-from settings import MODELS_PATH
+from helpers import ResourcePath
 
 
 class ModelSpesification:
@@ -13,7 +13,7 @@ class ModelSpesification:
         self.name = f"model_{self.default}_{self.id}" \
             if self.default else f"model_{self.id}"
 
-        self.model_dir = MODELS_PATH / self.name
+        self.model_dir = ResourcePath.MODELS / self.name
         self.log_dir = self.model_dir / "logs"
         self.figures_dir = self.model_dir / "figures"
 

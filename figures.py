@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from model import ModelSpesification
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              precision_recall_curve, confusion_matrix)
-from settings import TEST_ANNOTATIONS_PATH, classes
+from helpers import ResourcePath, ArrhythmiaType
 
 
 class ModelFigureGenerator:
@@ -18,13 +18,17 @@ class ModelFigureGenerator:
         self.score_fun = {"Precision": precision_score, "Recall": recall_score,
                           "Specificity": partial(recall_score, pos_label=0), "F1": f1_score}
         self.predictor_names = ["DNN", "cardio.", "emerg.", "stud."]
-        self.diagnosis = classes
+        self.diagnosis = list(ArrhythmiaType)
 
         # Cardiologists, residents and students performance
-        self.y_gold = pd.read_csv(TEST_ANNOTATIONS_PATH / "gold_standard.csv").values
-        self.y_student = pd.read_csv(TEST_ANNOTATIONS_PATH / "medical_students.csv").values
-        self.y_emerg = pd.read_csv(TEST_ANNOTATIONS_PATH / "emergency_residents.csv").values
-        self.y_cardio = pd.read_csv(TEST_ANNOTATIONS_PATH / "cardiology_residents.csv").values
+        self.y_gold = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
+                                  "gold_standard.csv")[:, self.diagnosis].values
+        self.y_stud = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
+                                  "medical_students.csv")[:, self.diagnosis].values
+        self.y_emrg = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
+                                  "emergency_residents.csv")[:, self.diagnosis].values
+        self.y_card = pd.read_csv(ResourcePath.TEST_ANNOTATIONS /
+                                  "cardiology_residents.csv")[:, self.diagnosis].values
         self.y_dnn = np.load(self.specs.model_dir / f"prediction.npy")
 
         # Get neural network prediction
@@ -70,7 +74,7 @@ class ModelFigureGenerator:
 
     def generate_table_two(self):
         scores_list = []
-        for y_pred in [self.y_neuralnet, self.y_cardio, self.y_emerg, self.y_student]:
+        for y_pred in [self.y_neuralnet, self.y_card, self.y_emrg, self.y_stud]:
             scores = self.get_scores(self.y_gold, y_pred, self.score_fun)
             scores_df = pd.DataFrame(scores, index=self.diagnosis,
                                      columns=np.array(self.score_fun.keys()))
@@ -89,7 +93,7 @@ class ModelFigureGenerator:
         percentiles = [2.5, 97.5]
         scores_resampled_list = []
         scores_percentiles_list = []
-        for y_pred in [self.y_neuralnet, self.y_cardio, self.y_emerg, self.y_student]:
+        for y_pred in [self.y_neuralnet, self.y_card, self.y_emrg, self.y_stud]:
             # Compute bootstrapped samples
             np.random.seed(123)  # Never change this
             n, _ = np.shape(self.y_gold)
@@ -158,7 +162,7 @@ class ModelFigureGenerator:
     def generate_supplementary_table_one(self):
         m = [[confusion_matrix(self.y_gold[:, k], y_pred[:, k],
                                labels=[0, 1]) for k in range(len(self.diagnosis))]
-             for y_pred in [self.y_neuralnet, self.y_cardio, self.y_emerg, self.y_student]]
+             for y_pred in [self.y_neuralnet, self.y_card, self.y_emrg, self.y_stud]]
 
         m_xarray = xr.DataArray(np.array(m),
                                 dims=['predictor', 'diagnosis', 'true label', 'predicted label'],

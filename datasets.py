@@ -6,8 +6,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Literal
-
-from settings import INPUT_DATA_PATH, LABEL_DATA_PATH, classes
+from helpers import ResourcePath, ArrhythmiaType
 
 
 class ECGSequence(keras.utils.Sequence):
@@ -45,7 +44,7 @@ class ECGSequence(keras.utils.Sequence):
             self.predict_mode = True
 
         self.csvs = [] if self.predict_mode else \
-            [pd.read_csv(file).loc[:, classes].values for file in csv_files]
+            [pd.read_csv(file).loc[:, list(ArrhythmiaType)].values for file in csv_files]
 
         self.hdf5_dset = hdf5_dset
         self.hdf5s = [h5py.File(file, "r") for file in hdf5_files]
@@ -99,17 +98,15 @@ class ECGSequence(keras.utils.Sequence):
 
 
 def generate_label_file(input_file: str, output_file: str):
-    with h5py.File(INPUT_DATA_PATH / f"{input_file}", "r+") as file:
+    with h5py.File(ResourcePath.TRAIN_INPUTS / f"{input_file}", "r") as file:
         x, ids = file["tracings"], file["exam_id"]
 
-        y = pd.read_csv(LABEL_DATA_PATH.parent / "exams.csv", dtype=object)
+        y = pd.read_csv(ResourcePath.TRAIN_LABELS.parent / "exams.csv", dtype=object)
         y = (y.astype({"exam_id": int})).set_index("exam_id").reindex(ids)
         with pd.option_context('future.no_silent_downcasting', True):
             y.replace({"True": 1, "False": 0}, inplace=True)
 
-        # Save labels
-        pd.DataFrame(y).to_csv(LABEL_DATA_PATH / output_file,
-                               index=False, header=True)
+        y.to_csv(ResourcePath.TRAIN_LABELS / output_file, index=False)
 
 
 def generate_label_files():
@@ -121,11 +118,11 @@ def get_files(data_type: Literal["input", "label"]):
     lookup = {
         "input": {
             "suffix": "hdf5",
-            "path": INPUT_DATA_PATH,
+            "path": ResourcePath.TRAIN_INPUTS,
         },
         "label": {
             "suffix": "csv",
-            "path": LABEL_DATA_PATH,
+            "path": ResourcePath.TRAIN_LABELS,
         }
     }
 
