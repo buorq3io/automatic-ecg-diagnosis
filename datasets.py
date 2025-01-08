@@ -5,13 +5,13 @@ import keras
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Literal, Iterable
+from typing import Literal, Sequence
 from helpers import ResourcePath, ArrhythmiaType, CardiogramLead
 
 
 class CardiogramSequence(keras.utils.Sequence):
     @staticmethod
-    def get_batch_info(hdf5_files: Iterable[Path], hdf5_dset: str,
+    def get_batch_info(hdf5_files: Sequence[Path], hdf5_dset: str,
                        batch_size: int, drop_last: bool):
         n_batches = 0
         batch_ranges = [0]
@@ -26,60 +26,65 @@ class CardiogramSequence(keras.utils.Sequence):
         return batch_ranges, n_batches
 
     @classmethod
-    def get_train_and_val(cls, hdf5_files: Iterable[Path], csv_files: Iterable[Path],
-                          hdf5_dset: str = "tracings", batch_size: int = 32,
+    def get_train_and_val(cls, hdf5_files: Sequence[Path], csv_files: Sequence[Path],
+                          hdf5_dset: str = "tracings", batch_size: int = 32, seed: int = 42,
                           val_split: float = 0.02, drop_last: bool = True, **kwargs):
         n_batches = cls.get_batch_info(hdf5_files, hdf5_dset, batch_size, drop_last)[1]
+        mask = np.random.default_rng(seed).permutation(n_batches)
+
         n_train = math.ceil(n_batches * (1 - val_split))
         train_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size,
-                        drop_last=drop_last, end_batch=n_train, **kwargs)
+                        drop_last=drop_last, seed=seed, mask=mask[:n_train], **kwargs)
         valid_seq = cls(hdf5_files, csv_files, hdf5_dset, batch_size,
-                        drop_last=drop_last, start_batch=n_train, **kwargs)
+                        drop_last=drop_last, seed=seed, mask=mask[n_train:], **kwargs)
         return train_seq, valid_seq
 
-    def __init__(self, hdf5_files: Iterable[Path], csv_files: Iterable[Path] = None,
-                 hdf5_dset: str = "tracings", batch_size: int = 32, start_batch: int = 0,
-                 end_batch: int = None, drop_last: bool = True, shuffle: bool = True,
-                 leads: Iterable[CardiogramLead] = tuple(CardiogramLead),
-                 types: Iterable[ArrhythmiaType] = tuple(ArrhythmiaType), **kwargs):
+    def __init__(self, hdf5_files: Sequence[Path], csv_files: Sequence[Path] = None,
+                 hdf5_dset: str = "tracings", batch_size: int = 32, shuffle: bool = True,
+                 drop_last: bool = True, mask: Sequence[int] = None, seed: int = 42,
+                 leads: Sequence[CardiogramLead] = tuple(CardiogramLead),
+                 types: Sequence[ArrhythmiaType] = tuple(ArrhythmiaType), **kwargs):
         super().__init__(**kwargs)
 
-        self.predict_mode = False
-        if csv_files is None:
-            self.predict_mode = True
+        self.leads = leads
+        self.shuffle = shuffle
+        self.n_classes = len(types)
+        self.batch_size = batch_size
+        self.rng = np.random.default_rng(seed)
 
+        self.predict_mode = True if csv_files is None else False
         self.csvs = [] if self.predict_mode else \
             [pd.read_csv(file).loc[:, types].values for file in csv_files]
 
         self.hdf5_dset = hdf5_dset
         self.hdf5s = [h5py.File(file, "r") for file in hdf5_files]
-        self.ranges = self.get_batch_info(hdf5_files, hdf5_dset, batch_size, drop_last)[0]
 
-        self.batch_size = batch_size
-        self.start_batch = start_batch
-        self.end_batch = end_batch if end_batch is not None else (
-            self.get_batch_info(hdf5_files, hdf5_dset, batch_size, drop_last)[1])
+        self.__global_ranges, global_len = self.get_batch_info(
+            hdf5_files, hdf5_dset, batch_size, drop_last)
 
-        self.leads = leads
-        self.shuffle = shuffle
-        self.shuffle_indices = np.arange(self.__len__())
-
-    @property
-    def n_classes(self):
-        return self.csvs[0].shape[1]
+        if mask is not None and (np.array(mask) >= global_len).any():
+            raise ValueError("The provided mask contains indices "
+                             "that exceed the available batch range.")
+        self.indices = np.array(mask if mask is not None else range(global_len))
 
     def on_epoch_end(self):
-        np.random.shuffle(self.shuffle_indices)
+        if self.shuffle:
+            self.rng.shuffle(self.indices)
+    
+    def __len__(self):
+        return len(self.indices)
+
+    def __del__(self):
+        for file in self.hdf5s:
+            file.close()
 
     def __getitem__(self, item: int):
-        if self.shuffle:
-            item = self.shuffle_indices[item]
+        item = self.indices[item]
 
         file_index, batch_index = 0, 0
-        for i in range(1, len(self.ranges)):
-            if (self.start_batch + item) < self.ranges[i]:
-                file_index = i - 1
-                batch_index = item + self.start_batch - self.ranges[i - 1]
+        for i in range(1, len(self.__global_ranges)):
+            if item < self.__global_ranges[i]:
+                file_index, batch_index = i - 1, item - self.__global_ranges[i - 1]
                 break
 
         start = batch_index * self.batch_size
@@ -91,13 +96,6 @@ class CardiogramSequence(keras.utils.Sequence):
         else:
             return (np.array(self.hdf5s[file_index][self.hdf5_dset][start:end, :, self.leads]),
                     np.array(self.csvs[file_index][start:end]))
-
-    def __len__(self):
-        return self.end_batch - self.start_batch
-
-    def __del__(self):
-        for file in self.hdf5s:
-            file.close()
 
 
 def generate_label_file(input_file: str, output_file: str):
