@@ -9,8 +9,8 @@ class ModelLoader:
         self.tag = tag
 
         self.model_dir = ResourcePath.MODELS / f"model_{self.id}"
-        self.pred_path = self.model_dir / f"model_{self.tag}.keras"
-        self.model_path = self.model_dir / f"prediction_{self.tag}.keras"
+        self.pred_path = self.model_dir / f"prediction_{self.tag}.npy"
+        self.model_path = self.model_dir / f"model_{self.tag}.keras"
 
         self.log_dir = self.model_dir / "logs"
         self.figures_dir = self.model_dir / "figures" / self.tag
